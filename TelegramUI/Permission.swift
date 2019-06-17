@@ -63,9 +63,14 @@ public enum PermissionState: Equatable {
     }
 }
 
-public func requiredPermissions(context: AccountContext) -> Signal<(PermissionState, PermissionState, PermissionState), NoError> {
-    return combineLatest(DeviceAccess.authorizationStatus(context: context, subject: .contacts), DeviceAccess.authorizationStatus(context: context, subject: .notifications), DeviceAccess.authorizationStatus(context: context, subject: .siri))
+public typealias RequiredPermissionsResult = (contactsState: PermissionState, notificationsState: PermissionState, siriState: PermissionState)
+public func requiredPermissions(context: AccountContext) -> Signal<RequiredPermissionsResult, NoError> {
+    return combineLatest(DeviceAccess.authorizationStatus(context: context, subject: .contacts),
+                         DeviceAccess.authorizationStatus(context: context, subject: .notifications),
+                         DeviceAccess.authorizationStatus(context: context, subject: .siri))
     |> map { contactsStatus, notificationsStatus, siriStatus in
-        return (.contacts(status: PermissionRequestStatus(accessType: contactsStatus)), .notifications(status: PermissionRequestStatus(accessType: notificationsStatus)), .siri(status: PermissionRequestStatus(accessType: siriStatus)))
+        return (.contacts(status: PermissionRequestStatus(accessType: contactsStatus)),
+                .notifications(status: PermissionRequestStatus(accessType: notificationsStatus)),
+                .siri(status: PermissionRequestStatus(accessType: siriStatus)))
     }
 }
