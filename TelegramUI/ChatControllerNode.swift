@@ -1515,16 +1515,14 @@ class ChatControllerNode: ASDisplayNode, UIScrollViewDelegate {
     }
     
     func dismissInput() {
-        if let _ = self.chatPresentationInterfaceState.inputTextPanelState.mediaRecordingState {
-            return
-        }
+        guard self.chatPresentationInterfaceState.inputTextPanelState.mediaRecordingState == nil else { return }
         
         switch self.chatPresentationInterfaceState.inputMode {
             case .none:
                 break
             default:
                 self.interfaceInteraction?.updateInputModeAndDismissedButtonKeyboardMessageId({ state in
-                    return (.none, state.interfaceState.messageActionsState.closedButtonKeyboardMessageId)
+                    return (.none, state.keyboardButtonsMessage?.id ?? state.interfaceState.messageActionsState.closedButtonKeyboardMessageId)
                 })
         }
         self.searchNavigationNode?.deactivate()
@@ -1978,14 +1976,7 @@ class ChatControllerNode: ASDisplayNode, UIScrollViewDelegate {
         
         if canDismiss, let inputHeight = derivedLayoutState.inputNodeHeight, currentLocation.y + (self.keyboardGestureAccessoryHeight ?? 0.0) > validLayout.size.height - inputHeight {
             self.upperInputPositionBound = nil
-            self.requestUpdateInterfaceState(.animated(duration: 0.25, curve: .spring), true, { state in
-                if case .none = state.inputMode {
-                    return state
-                }
-                return state.updatedInputMode { _ in
-                    return .none
-                }
-            })
+            self.dismissInput()
         } else {
             self.upperInputPositionBound = nil
             self.updateLayoutInternal(transition: .animated(duration: 0.25, curve: .spring))
