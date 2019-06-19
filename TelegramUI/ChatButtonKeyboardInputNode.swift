@@ -157,6 +157,8 @@ final class ChatButtonKeyboardInputNode: ChatInputNode {
     }
     
     @objc func buttonPressed(_ button: ASButtonNode) {
+        self.controllerInteraction.updateInputMode({ _ in ChatInputMode.none })
+
         if let button = button as? ChatButtonKeyboardInputButtonNode, let markupButton = button.button {
             switch markupButton.action {
                 case .text:
