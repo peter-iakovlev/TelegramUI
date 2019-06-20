@@ -44,6 +44,13 @@ final public class PasscodeEntryController: ViewController {
     private var hasOngoingBiometricsRequest = false
     private var skipNextBiometricsRequest = false
     
+    private var didEnterBackgroundObserver: AnyObject?
+    private var willEnterForegroundObserver: AnyObject?
+    
+    // app state source workaround to avoid a more complex UIApplication.shared workaround
+    // (which is unavailable in app extensions, see BITHockeyHelper+Application.h for the complex workaround example)
+    private var isInBackground: Bool = false
+    
     public init(context: AccountContext, challengeData: PostboxAccessChallengeData, biometrics: PasscodeEntryControllerBiometricsMode, inShareExtension: Bool = false, arguments: PasscodeEntryControllerPresentationArguments) {
         self.context = context
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
@@ -63,9 +70,29 @@ final public class PasscodeEntryController: ViewController {
                 strongSelf.controllerNode.updatePresentationData(presentationData)
             }
         })
+        
+        self.didEnterBackgroundObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.UIApplicationDidEnterBackground, object: nil, queue: OperationQueue.main, using: { [weak self] notification in
+            if let strongSelf = self {
+                // reset skip flag when app backgrounded to avoid missing biometric auth requests in some cases
+                strongSelf.skipNextBiometricsRequest = false
+                strongSelf.isInBackground = true
+            }
+        })
+        
+        self.willEnterForegroundObserver = NotificationCenter.default.addObserver(forName: NSNotification.Name.UIApplicationWillEnterForeground, object: nil, queue: OperationQueue.main, using: { [weak self] notification in
+            if let strongSelf = self {
+                strongSelf.isInBackground = false
+            }
+        })
     }
     
     deinit {
+        if let didEnterBackgroundObserver = self.didEnterBackgroundObserver {
+            NotificationCenter.default.removeObserver(didEnterBackgroundObserver)
+        }
+        if let willEnterForegroundObserver = self.willEnterForegroundObserver {
+            NotificationCenter.default.removeObserver(willEnterForegroundObserver)
+        }
         self.presentationDataDisposable?.dispose()
         self.biometricsDisposable.dispose()
     }
@@ -270,7 +297,10 @@ final public class PasscodeEntryController: ViewController {
                 }
             } else {
                 strongSelf.hasOngoingBiometricsRequest = false
-                strongSelf.skipNextBiometricsRequest = true
+                
+                if !strongSelf.isInBackground {
+                    strongSelf.skipNextBiometricsRequest = true
+                }
             }
         }))
     }
