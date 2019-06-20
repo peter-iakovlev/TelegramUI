@@ -197,8 +197,8 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
         
         super.init()
         
-        self.scrubberView.seek = { [weak self] timecode in
-            self?.videoNode?.seek(timecode)
+        self.scrubberView.seek = { [weak self] timecode, seekState in
+            self?.videoNode?.seek(timecode, seekState: seekState)
         }
         
         self.statusButtonNode.addSubnode(self.statusNode)

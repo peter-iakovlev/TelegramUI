@@ -1032,8 +1032,58 @@ final class MediaPlayer {
         }
     }
     
-    func seek(timestamp: Double, play: Bool? = nil) {
-        self.queue.async {
+    fileprivate var lastSeekCallTime: DispatchTime = .now()
+    
+    // Calls only one action within specified time interval.
+    // Other actions are ignored.
+    private func debounceSeek(withTimeInterval timeInterval: TimeInterval,
+                              forceInstantUpdate: Bool = false,
+                              action: @escaping ()->Void) {
+        
+        func dispatchTimeInterval(_ withTimeInterval: TimeInterval) -> DispatchTimeInterval {
+            return DispatchTimeInterval.nanoseconds(Int(withTimeInterval * Double(NSEC_PER_SEC)))
+        }
+        
+        let nextCallTime = lastSeekCallTime + dispatchTimeInterval(timeInterval)
+        if DispatchTime.now() >= nextCallTime || forceInstantUpdate {
+            lastSeekCallTime = .now()
+            self.queue.async {
+                // instant seek
+                action()
+            }
+        } else {
+            self.queue.after(timeInterval) { [weak self] in
+                guard let self = self else { return }
+                let nextCallTime = self.lastSeekCallTime + dispatchTimeInterval(timeInterval)
+                if !self.ignoreFurtherDebouncedUpdates && (DispatchTime.now() >= nextCallTime) {
+                    // debounced seek
+                    action()
+                    self.lastSeekCallTime = .now()
+                }
+            }
+        }
+    }
+    
+    // Continuous seek performance overview
+    //
+    // iPhone 7
+    //   480p video
+    //     playback - 18% CPU
+    //     8 FPS continuous seek - 40% CPU
+    //     15 FPS continuous seek - 60% CPU
+    //   1080p video
+    //     playback - 18% CPU
+    //     8 FPS continuous seek - 85% CPU
+    //     15 FPS continuous seek - 120% CPU
+    fileprivate let debouncedSeekTargetFPS: Double = 8.0
+    
+    // used to ignore all the delayed seeks after an immediate one
+    fileprivate var ignoreFurtherDebouncedUpdates: Bool = false
+    
+    func seek(timestamp: Double, play: Bool? = nil, debounce: Bool = false) {
+
+        ignoreFurtherDebouncedUpdates = !debounce
+        debounceSeek(withTimeInterval: 1.0 / debouncedSeekTargetFPS, forceInstantUpdate: !debounce) {
             if let context = self.contextRef?.takeUnretainedValue() {
                 if let play = play {
                     context.seek(timestamp: timestamp, action: play ? .play : .pause)

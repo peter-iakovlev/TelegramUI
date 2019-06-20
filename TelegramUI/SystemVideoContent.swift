@@ -249,7 +249,7 @@ private final class SystemVideoContentNode: ASDisplayNode, UniversalVideoContent
         assert(Queue.mainQueue().isCurrent())
     }
     
-    func seek(_ timestamp: Double) {
+    func seek(_ timestamp: Double, seekState: MediaSeekState = .unknown) {
         assert(Queue.mainQueue().isCurrent())
         self.playerItem.seek(to: CMTimeMake(Int64(timestamp) * 1000, 1000))
     }

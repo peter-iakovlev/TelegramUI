@@ -175,6 +175,19 @@ private final class MediaPlayerScrubbingBufferingNode: ASDisplayNode {
     }
 }
 
+// Defines a seek state similar to UIGestureRecognizer state
+// example use case: pause a player while seek is in progress, continue playing after seek ended
+enum MediaSeekState {
+    // state is not specified
+    case unknown
+    
+    // seek is in progress and next seek event is expected
+    case inProgress
+    
+    // this is the last seek event
+    case ended
+}
+
 final class MediaPlayerScrubbingNode: ASDisplayNode {
     private var contentNodes: MediaPlayerScrubbingNodeContentNodes
     
@@ -187,7 +200,8 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
     
     var playbackStatusUpdated: ((MediaPlayerPlaybackStatus?) -> Void)?
     var playerStatusUpdated: ((MediaPlayerStatus?) -> Void)?
-    var seek: ((Double) -> Void)?
+    var seek: ((Double, MediaSeekState) -> Void)?
+    var allowsContinuousSeekUpdates: Bool = false
     
     private let _scrubbingTimestamp = Promise<Double?>(nil)
     var scrubbingTimestamp: Signal<Double?, NoError> {
@@ -387,6 +401,10 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                             if let statusValue = strongSelf.statusValue, let scrubbingBeginTimestamp = strongSelf.scrubbingBeginTimestamp, Double(0.0).isLess(than: statusValue.duration) {
                                 strongSelf.scrubbingTimestampValue = max(0.0, min(statusValue.duration, scrubbingBeginTimestamp + statusValue.duration * Double(addedFraction)))
                                 strongSelf._scrubbingTimestamp.set(.single(strongSelf.scrubbingTimestampValue))
+                                if strongSelf.allowsContinuousSeekUpdates,
+                                    let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue {
+                                    strongSelf.seek?(scrubbingTimestampValue, .inProgress)
+                                }
                                 strongSelf.updateProgressAnimations()
                             }
                         }
@@ -406,7 +424,7 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                                             strongSelf.ignoreSeekId = statusValue.seekId
                                     }
                                 }
-                                strongSelf.seek?(scrubbingTimestampValue)
+                                strongSelf.seek?(scrubbingTimestampValue, .ended)
                             }
                             strongSelf.updateProgressAnimations()
                         }
@@ -451,7 +469,7 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                             let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue
                             strongSelf.scrubbingTimestampValue = nil
                             if let scrubbingTimestampValue = scrubbingTimestampValue, apply {
-                                strongSelf.seek?(scrubbingTimestampValue)
+                                strongSelf.seek?(scrubbingTimestampValue, .ended)
                             }
                             strongSelf.updateProgressAnimations()
                         }
