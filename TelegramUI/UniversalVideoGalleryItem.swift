@@ -163,6 +163,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     private var validLayout: (ContainerViewLayout, CGFloat)?
     private var didPause = false
     private var isPaused = true
+    private var isPausedDuringSeek = false
     private var dismissOnOrientationChange = false
     private var keepSoundOnDismiss = false
     
@@ -197,8 +198,21 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
         
         super.init()
         
-        self.scrubberView.seek = { [weak self] timecode in
-            self?.videoNode?.seek(timecode)
+        self.scrubberView.seek = { [weak self] timecode, isContinuous in
+            guard let strongSelf = self else { return }
+
+            if isContinuous {
+                if !strongSelf.isPaused {
+                    strongSelf.isPausedDuringSeek = true
+                    strongSelf.videoNode?.pause()
+                }
+            } else if strongSelf.isPausedDuringSeek {
+                strongSelf.isPausedDuringSeek = false
+                if strongSelf.isPaused {
+                    strongSelf.videoNode?.play()
+                }
+            }
+            strongSelf.videoNode?.seek(timecode)
         }
         
         self.statusButtonNode.addSubnode(self.statusNode)

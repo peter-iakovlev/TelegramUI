@@ -187,14 +187,17 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
     
     var playbackStatusUpdated: ((MediaPlayerPlaybackStatus?) -> Void)?
     var playerStatusUpdated: ((MediaPlayerStatus?) -> Void)?
-    var seek: ((Double) -> Void)?
-    
+    var seek: ((_ timestamp: Double, _ isContinuous: Bool) -> Void)?
+
     private let _scrubbingTimestamp = Promise<Double?>(nil)
     var scrubbingTimestamp: Signal<Double?, NoError> {
         return self._scrubbingTimestamp.get()
     }
     
     var ignoreSeekId: Int?
+
+    private let seekTimeout: Double
+    var trackingTimestampTimer: SwiftSignalKit.Timer?
     
     var enableScrubbing: Bool = true {
         didSet {
@@ -327,8 +330,9 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
         }
     }
     
-    init(content: MediaPlayerScrubbingNodeContent) {
+    init(content: MediaPlayerScrubbingNodeContent, seekTimeout: Double = 0.05) {
         self.contentNodes = MediaPlayerScrubbingNode.contentNodesFromContent(content, enableScrubbing: self.enableScrubbing)
+        self.seekTimeout = seekTimeout
         
         super.init()
         
@@ -362,6 +366,22 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                 subnode.removeFromSupernode()
             }
         }
+
+        let startSeeking = { [weak self] in
+            self?.trackingTimestampTimer?.invalidate()
+            if let currentTimestampValue = self?.scrubbingTimestampValue,
+                let strongSelf = self {
+                strongSelf.trackingTimestampTimer = SwiftSignalKit.Timer(timeout: strongSelf.seekTimeout, repeat: false, completion: { [weak self] in
+                    self?.seek?(currentTimestampValue, true)
+                }, queue: Queue.mainQueue())
+                strongSelf.trackingTimestampTimer?.start()
+            }
+        }
+
+        let endSeeking = { [weak self] (scrubbingTimestampValue: Double) in
+            self?.trackingTimestampTimer?.invalidate()
+            self?.seek?(scrubbingTimestampValue, false)
+        }
         
         switch self.contentNodes {
             case let .standard(node):
@@ -373,43 +393,45 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                 if let handleNodeContainer = node.handleNodeContainer {
                     self.addSubnode(handleNodeContainer)
                     handleNodeContainer.beginScrubbing = { [weak self] in
-                        if let strongSelf = self {
-                            if let statusValue = strongSelf.statusValue, Double(0.0).isLess(than: statusValue.duration) {
-                                strongSelf.scrubbingBeginTimestamp = statusValue.timestamp
-                                strongSelf.scrubbingTimestampValue = statusValue.timestamp
-                                strongSelf._scrubbingTimestamp.set(.single(strongSelf.scrubbingTimestampValue))
-                                strongSelf.updateProgressAnimations()
-                            }
+                        guard let strongSelf = self else { return }
+
+                        if let statusValue = strongSelf.statusValue, Double(0.0).isLess(than: statusValue.duration) {
+                            strongSelf.scrubbingBeginTimestamp = statusValue.timestamp
+                            strongSelf.scrubbingTimestampValue = statusValue.timestamp
+                            strongSelf._scrubbingTimestamp.set(.single(strongSelf.scrubbingTimestampValue))
+                            strongSelf.updateProgressAnimations()
+                            startSeeking()
                         }
                     }
                     handleNodeContainer.updateScrubbing = { [weak self] addedFraction in
-                        if let strongSelf = self {
-                            if let statusValue = strongSelf.statusValue, let scrubbingBeginTimestamp = strongSelf.scrubbingBeginTimestamp, Double(0.0).isLess(than: statusValue.duration) {
-                                strongSelf.scrubbingTimestampValue = max(0.0, min(statusValue.duration, scrubbingBeginTimestamp + statusValue.duration * Double(addedFraction)))
-                                strongSelf._scrubbingTimestamp.set(.single(strongSelf.scrubbingTimestampValue))
-                                strongSelf.updateProgressAnimations()
-                            }
+                        guard let strongSelf = self else { return }
+
+                        if let statusValue = strongSelf.statusValue, let scrubbingBeginTimestamp = strongSelf.scrubbingBeginTimestamp, Double(0.0).isLess(than: statusValue.duration) {
+                            strongSelf.scrubbingTimestampValue = max(0.0, min(statusValue.duration, scrubbingBeginTimestamp + statusValue.duration * Double(addedFraction)))
+                            strongSelf._scrubbingTimestamp.set(.single(strongSelf.scrubbingTimestampValue))
+                            strongSelf.updateProgressAnimations()
+                            startSeeking()
                         }
                     }
                     handleNodeContainer.endScrubbing = { [weak self] apply in
-                        if let strongSelf = self {
-                            strongSelf.scrubbingBeginTimestamp = nil
-                            let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue
-                            strongSelf.scrubbingTimestampValue = nil
-                            strongSelf._scrubbingTimestamp.set(.single(nil))
-                            if let scrubbingTimestampValue = scrubbingTimestampValue, apply {
-                                if let statusValue = strongSelf.statusValue {
-                                    switch statusValue.status {
-                                        case .buffering:
-                                            break
-                                        default:
-                                            strongSelf.ignoreSeekId = statusValue.seekId
-                                    }
+                        guard let strongSelf = self else { return }
+
+                        strongSelf.scrubbingBeginTimestamp = nil
+                        let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue
+                        strongSelf.scrubbingTimestampValue = nil
+                        strongSelf._scrubbingTimestamp.set(.single(nil))
+                        if let scrubbingTimestampValue = scrubbingTimestampValue, apply {
+                            if let statusValue = strongSelf.statusValue {
+                                switch statusValue.status {
+                                    case .buffering:
+                                        break
+                                    default:
+                                        strongSelf.ignoreSeekId = statusValue.seekId
                                 }
-                                strongSelf.seek?(scrubbingTimestampValue)
                             }
-                            strongSelf.updateProgressAnimations()
+                            endSeeking(scrubbingTimestampValue)
                         }
+                        strongSelf.updateProgressAnimations()
                     }
                 }
                 
@@ -429,32 +451,34 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                 if let handleNodeContainer = node.handleNodeContainer {
                     self.addSubnode(handleNodeContainer)
                     handleNodeContainer.beginScrubbing = { [weak self] in
-                        if let strongSelf = self {
-                            if let statusValue = strongSelf.statusValue, Double(0.0).isLess(than: statusValue.duration) {
-                                strongSelf.scrubbingBeginTimestamp = statusValue.timestamp
-                                strongSelf.scrubbingTimestampValue = statusValue.timestamp
-                                strongSelf.updateProgressAnimations()
-                            }
+                        guard let strongSelf = self else { return }
+
+                        if let statusValue = strongSelf.statusValue, Double(0.0).isLess(than: statusValue.duration) {
+                            strongSelf.scrubbingBeginTimestamp = statusValue.timestamp
+                            strongSelf.scrubbingTimestampValue = statusValue.timestamp
+                            strongSelf.updateProgressAnimations()
+                            startSeeking()
                         }
                     }
                     handleNodeContainer.updateScrubbing = { [weak self] addedFraction in
-                        if let strongSelf = self {
-                            if let statusValue = strongSelf.statusValue, let scrubbingBeginTimestamp = strongSelf.scrubbingBeginTimestamp, Double(0.0).isLess(than: statusValue.duration) {
-                                strongSelf.scrubbingTimestampValue = scrubbingBeginTimestamp + statusValue.duration * Double(addedFraction)
-                                strongSelf.updateProgressAnimations()
-                            }
+                        guard let strongSelf = self else { return }
+
+                        if let statusValue = strongSelf.statusValue, let scrubbingBeginTimestamp = strongSelf.scrubbingBeginTimestamp, Double(0.0).isLess(than: statusValue.duration) {
+                            strongSelf.scrubbingTimestampValue = scrubbingBeginTimestamp + statusValue.duration * Double(addedFraction)
+                            strongSelf.updateProgressAnimations()
+                            startSeeking()
                         }
                     }
                     handleNodeContainer.endScrubbing = { [weak self] apply in
-                        if let strongSelf = self {
-                            strongSelf.scrubbingBeginTimestamp = nil
-                            let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue
-                            strongSelf.scrubbingTimestampValue = nil
-                            if let scrubbingTimestampValue = scrubbingTimestampValue, apply {
-                                strongSelf.seek?(scrubbingTimestampValue)
-                            }
-                            strongSelf.updateProgressAnimations()
+                        guard let strongSelf = self else { return }
+
+                        strongSelf.scrubbingBeginTimestamp = nil
+                        let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue
+                        strongSelf.scrubbingTimestampValue = nil
+                        if let scrubbingTimestampValue = scrubbingTimestampValue, apply {
+                            endSeeking(scrubbingTimestampValue)
                         }
+                        strongSelf.updateProgressAnimations()
                     }
                 }
                 

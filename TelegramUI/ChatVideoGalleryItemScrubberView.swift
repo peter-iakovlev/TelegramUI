@@ -40,7 +40,7 @@ final class ChatVideoGalleryItemScrubberView: UIView {
         }
     }
     
-    var seek: (Double) -> Void = { _ in }
+    var seek: (_ timestamp: Double, _ isContinuous: Bool) -> Void = { _, _ in }
     
     override init(frame: CGRect) {
         self.scrubberNode = MediaPlayerScrubbingNode(content: .standard(lineHeight: 5.0, lineCap: .round, scrubberHandle: .circle, backgroundColor: UIColor(white: 1.0, alpha: 0.42), foregroundColor: .white))
@@ -57,8 +57,8 @@ final class ChatVideoGalleryItemScrubberView: UIView {
         
         super.init(frame: frame)
         
-        self.scrubberNode.seek = { [weak self] timestamp in
-            self?.seek(timestamp)
+        self.scrubberNode.seek = { [weak self] timestamp, isContinuous in
+            self?.seek(timestamp, isContinuous)
         }
         
         self.scrubberNode.playerStatusUpdated = { [weak self] status in
