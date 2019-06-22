@@ -1,6 +1,7 @@
 import Foundation
 import AsyncDisplayKit
 import SwiftSignalKit
+import Postbox
 
 private final class UniversalVideoContentSubscriber {
     let id: Int32
@@ -135,6 +136,19 @@ private final class UniversalVideoContentHolderCallbacks {
     }
 }
 
+private struct NativeVideoContentHolderKey: Hashable {
+    let id: UInt32
+    let mediaId: MediaId
+}
+
+private func getHolderKey(forContentId id: AnyHashable) -> AnyHashable {
+    if let id = id as? NativeVideoContentId, case let .message(_, stableId, mediaId) = id {
+        return NativeVideoContentHolderKey(id: stableId, mediaId: mediaId)
+    } else {
+        return id
+    }
+}
+
 final class UniversalVideoContentManager {
     private var holders: [AnyHashable: UniversalVideoContentHolder] = [:]
     private var holderCallbacks: [AnyHashable: UniversalVideoContentHolderCallbacks] = [:]
@@ -143,49 +157,37 @@ final class UniversalVideoContentManager {
         assert(Queue.mainQueue().isCurrent())
         
         var initiatedCreation = false
-        
+        let holderKey = getHolderKey(forContentId: content.id)
         let holder: UniversalVideoContentHolder
-        if let current = self.holders[content.id] {
+
+        if let current = self.holders[holderKey] {
             holder = current
         } else {
-            var foundHolder: UniversalVideoContentHolder?
-            for (_, current) in self.holders {
-                if current.content.isEqual(to: content) {
-                    //foundHolder = current
-                    break
+            initiatedCreation = true
+            holder = UniversalVideoContentHolder(
+                content: content,
+                contentNode: create(),
+                statusUpdated: { [weak self] value in
+                    guard let self = self, let current = self.holderCallbacks[holderKey] else { return }
+                    for subscriber in current.status.copyItems() {
+                        subscriber(value)
+                    }
+                },
+                bufferingStatusUpdated: { [weak self] value in
+                    guard let self = self, let current = self.holderCallbacks[holderKey] else { return }
+                    for subscriber in current.bufferingStatus.copyItems() {
+                        subscriber(value)
+                    }
+                },
+                playbackCompleted: { [weak self] in
+                    guard let self = self, let current = self.holderCallbacks[holderKey] else { return }
+                    for subscriber in current.playbackCompleted.copyItems() {
+                        subscriber()
+                    }
                 }
-            }
-            if let foundHolder = foundHolder {
-                holder = foundHolder
-            } else {
-                initiatedCreation = true
-                holder = UniversalVideoContentHolder(content: content, contentNode: create(), statusUpdated: { [weak self] value in
-                    if let strongSelf = self {
-                        if let current = strongSelf.holderCallbacks[content.id] {
-                            for subscriber in current.status.copyItems() {
-                                subscriber(value)
-                            }
-                        }
-                    }
-                }, bufferingStatusUpdated: { [weak self] value in
-                    if let strongSelf = self {
-                        if let current = strongSelf.holderCallbacks[content.id] {
-                            for subscriber in current.bufferingStatus.copyItems() {
-                                subscriber(value)
-                            }
-                        }
-                    }
-                }, playbackCompleted: { [weak self] in
-                    if let strongSelf = self {
-                        if let current = strongSelf.holderCallbacks[content.id] {
-                            for subscriber in current.playbackCompleted.copyItems() {
-                                subscriber()
-                            }
-                        }
-                    }
-                })
-                self.holders[content.id] = holder
-            }
+            )
+
+            self.holders[holderKey] = holder
         }
         
         let id = holder.addSubscriber(priority: priority, update: update)
@@ -195,13 +197,14 @@ final class UniversalVideoContentManager {
     
     func detachUniversalVideoContent(id: AnyHashable, index: Int32) {
         assert(Queue.mainQueue().isCurrent())
-        
-        if let holder = self.holders[id] {
+
+        let holderKey = getHolderKey(forContentId: id)
+        if let holder = self.holders[holderKey] {
             holder.removeSubscriberAndUpdate(id: index)
             if holder.isEmpty {
-                self.holders.removeValue(forKey: id)
+                self.holders.removeValue(forKey: holderKey)
                 
-                if let current = self.holderCallbacks[id] {
+                if let current = self.holderCallbacks[holderKey] {
                     for subscriber in current.status.copyItems() {
                         subscriber(nil)
                     }
@@ -211,7 +214,8 @@ final class UniversalVideoContentManager {
     }
     
     func withUniversalVideoContent(id: AnyHashable, _ f: ((UniversalVideoContentNode & ASDisplayNode)?) -> Void) {
-        if let holder = self.holders[id] {
+        let holderKey = getHolderKey(forContentId: id)
+        if let holder = self.holders[holderKey] {
             f(holder.contentNode)
         } else {
             f(nil)
@@ -220,40 +224,43 @@ final class UniversalVideoContentManager {
     
     func addPlaybackCompleted(id: AnyHashable, _ f: @escaping () -> Void) -> Int {
         assert(Queue.mainQueue().isCurrent())
+        let holderKey = getHolderKey(forContentId: id)
         var callbacks: UniversalVideoContentHolderCallbacks
-        if let current = self.holderCallbacks[id] {
+        if let current = self.holderCallbacks[holderKey] {
             callbacks = current
         } else {
             callbacks = UniversalVideoContentHolderCallbacks()
-            self.holderCallbacks[id] = callbacks
+            self.holderCallbacks[holderKey] = callbacks
         }
         return callbacks.playbackCompleted.add(f)
     }
     
     func removePlaybackCompleted(id: AnyHashable, index: Int) {
-        if let current = self.holderCallbacks[id] {
+        let holderKey = getHolderKey(forContentId: id)
+        if let current = self.holderCallbacks[holderKey] {
             current.playbackCompleted.remove(index)
             if current.playbackCompleted.isEmpty {
-                self.holderCallbacks.removeValue(forKey: id)
+                self.holderCallbacks.removeValue(forKey: holderKey)
             }
         }
     }
     
     func statusSignal(content: UniversalVideoContent) -> Signal<MediaPlayerStatus?, NoError> {
         return Signal { subscriber in
+            let holderKey = getHolderKey(forContentId: content.id)
+
             var callbacks: UniversalVideoContentHolderCallbacks
-            if let current = self.holderCallbacks[content.id] {
+            if let current = self.holderCallbacks[holderKey] {
                 callbacks = current
             } else {
                 callbacks = UniversalVideoContentHolderCallbacks()
-                self.holderCallbacks[content.id] = callbacks
+                self.holderCallbacks[holderKey] = callbacks
             }
             
             let index = callbacks.status.add({ value in
                 subscriber.putNext(value)
             })
-            
-            if let current = self.holders[content.id] {
+            if let current = self.holders[holderKey] {
                 subscriber.putNext(current.statusValue)
             } else {
                 subscriber.putNext(nil)
@@ -261,10 +268,10 @@ final class UniversalVideoContentManager {
             
             return ActionDisposable {
                 Queue.mainQueue().async {
-                    if let current = self.holderCallbacks[content.id] {
+                    if let current = self.holderCallbacks[holderKey] {
                         current.status.remove(index)
                         if current.playbackCompleted.isEmpty {
-                            self.holderCallbacks.removeValue(forKey: content.id)
+                            self.holderCallbacks.removeValue(forKey: holderKey)
                         }
                     }
                 }
@@ -274,19 +281,21 @@ final class UniversalVideoContentManager {
     
     func bufferingStatusSignal(content: UniversalVideoContent) -> Signal<(IndexSet, Int)?, NoError> {
         return Signal { subscriber in
+            let holderKey = getHolderKey(forContentId: content.id)
+
             var callbacks: UniversalVideoContentHolderCallbacks
-            if let current = self.holderCallbacks[content.id] {
+            if let current = self.holderCallbacks[holderKey] {
                 callbacks = current
             } else {
                 callbacks = UniversalVideoContentHolderCallbacks()
-                self.holderCallbacks[content.id] = callbacks
+                self.holderCallbacks[holderKey] = callbacks
             }
             
             let index = callbacks.bufferingStatus.add({ value in
                 subscriber.putNext(value)
             })
             
-            if let current = self.holders[content.id] {
+            if let current = self.holders[holderKey] {
                 subscriber.putNext(current.bufferingStatusValue)
             } else {
                 subscriber.putNext(nil)
@@ -294,10 +303,10 @@ final class UniversalVideoContentManager {
             
             return ActionDisposable {
                 Queue.mainQueue().async {
-                    if let current = self.holderCallbacks[content.id] {
+                    if let current = self.holderCallbacks[holderKey] {
                         current.status.remove(index)
                         if current.playbackCompleted.isEmpty {
-                            self.holderCallbacks.removeValue(forKey: content.id)
+                            self.holderCallbacks.removeValue(forKey: holderKey)
                         }
                     }
                 }
