@@ -157,54 +157,56 @@ final class ChatButtonKeyboardInputNode: ChatInputNode {
     }
     
     @objc func buttonPressed(_ button: ASButtonNode) {
-        if let button = button as? ChatButtonKeyboardInputButtonNode, let markupButton = button.button {
-            switch markupButton.action {
-                case .text:
-                    self.controllerInteraction.sendMessage(markupButton.title)
-                case let .url(url):
-                    self.controllerInteraction.openUrl(url, true, nil)
-                case .requestMap:
-                    self.controllerInteraction.shareCurrentLocation()
-                case .requestPhone:
-                    self.controllerInteraction.shareAccountContact()
-                case .openWebApp:
-                    if let message = self.message {
-                        self.controllerInteraction.requestMessageActionCallback(message.id, nil, true)
-                    }
-                case let .callback(data):
-                    if let message = self.message {
-                        self.controllerInteraction.requestMessageActionCallback(message.id, data, false)
-                    }
-                case let .switchInline(samePeer, query):
-                    if let message = message {
-                        var botPeer: Peer?
-                        
-                        var found = false
-                        for attribute in message.attributes {
-                            if let attribute = attribute as? InlineBotMessageAttribute, let peerId = attribute.peerId {
-                                botPeer = message.peers[peerId]
-                                found = true
-                            }
-                        }
-                        if !found {
-                            botPeer = message.author
-                        }
-                        
-                        var peerId: PeerId?
-                        if samePeer {
-                            peerId = message.id.peerId
-                        }
-                        if let botPeer = botPeer, let addressName = botPeer.addressName {
-                            self.controllerInteraction.openPeer(peerId, .chat(textInputState: ChatTextInputState(inputText: NSAttributedString(string: "@\(addressName) \(query)")), messageId: nil), nil)
+        guard let markupButton = (button as? ChatButtonKeyboardInputButtonNode)?.button else { return }
+
+        self.controllerInteraction.updateInputMode({ _ in ChatInputMode.none })
+
+        switch markupButton.action {
+            case .text:
+                self.controllerInteraction.sendMessage(markupButton.title)
+            case let .url(url):
+                self.controllerInteraction.openUrl(url, true, nil)
+            case .requestMap:
+                self.controllerInteraction.shareCurrentLocation()
+            case .requestPhone:
+                self.controllerInteraction.shareAccountContact()
+            case .openWebApp:
+                if let message = self.message {
+                    self.controllerInteraction.requestMessageActionCallback(message.id, nil, true)
+                }
+            case let .callback(data):
+                if let message = self.message {
+                    self.controllerInteraction.requestMessageActionCallback(message.id, data, false)
+                }
+            case let .switchInline(samePeer, query):
+                if let message = message {
+                    var botPeer: Peer?
+
+                    var found = false
+                    for attribute in message.attributes {
+                        if let attribute = attribute as? InlineBotMessageAttribute, let peerId = attribute.peerId {
+                            botPeer = message.peers[peerId]
+                            found = true
                         }
                     }
-                case .payment:
-                    break
-                case let .urlAuth(url, buttonId):
-                    if let message = self.message {
-                        self.controllerInteraction.requestMessageActionUrlAuth(url, message.id, buttonId)
+                    if !found {
+                        botPeer = message.author
                     }
-            }
+
+                    var peerId: PeerId?
+                    if samePeer {
+                        peerId = message.id.peerId
+                    }
+                    if let botPeer = botPeer, let addressName = botPeer.addressName {
+                        self.controllerInteraction.openPeer(peerId, .chat(textInputState: ChatTextInputState(inputText: NSAttributedString(string: "@\(addressName) \(query)")), messageId: nil), nil)
+                    }
+                }
+            case .payment:
+                break
+            case let .urlAuth(url, buttonId):
+                if let message = self.message {
+                    self.controllerInteraction.requestMessageActionUrlAuth(url, message.id, buttonId)
+                }
         }
     }
 }
