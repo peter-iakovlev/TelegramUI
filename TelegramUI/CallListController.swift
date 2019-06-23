@@ -246,6 +246,7 @@ public final class CallListController: ViewController {
         self.controllerNode.updateState { state in
             return state.withUpdatedEditing(false)
         }
+        self.controllerNode.dismissAllRevealOptions()
     }
     
     private func call(_ peerId: PeerId, began: (() -> Void)? = nil) {
