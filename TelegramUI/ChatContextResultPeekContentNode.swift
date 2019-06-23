@@ -18,7 +18,7 @@ final class ChatContextResultPeekContent: PeekControllerContent {
     }
     
     func presentation() -> PeekControllerContentPresentation {
-        return .contained
+        return .contained(userInterfaceEnabled: false)
     }
     
     func menuActivation() -> PeerkControllerMenuActivation {
