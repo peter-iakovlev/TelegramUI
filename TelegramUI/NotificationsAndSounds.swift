@@ -11,6 +11,7 @@ private final class NotificationsAndSoundsArguments {
     let soundSelectionDisposable: MetaDisposable
     
     let authorizeNotifications: () -> Void
+    let muteWarningInTabBar: (Bool) -> Void
     let suppressWarning: () -> Void
     
     let updateMessageAlerts: (Bool) -> Void
@@ -44,12 +45,13 @@ private final class NotificationsAndSoundsArguments {
     
     let updateNotificationsFromAllAccounts: (Bool) -> Void
     
-    init(context: AccountContext, presentController: @escaping (ViewController, ViewControllerPresentationArguments?) -> Void, pushController: @escaping(ViewController)->Void, soundSelectionDisposable: MetaDisposable, authorizeNotifications: @escaping () -> Void, suppressWarning: @escaping () -> Void, updateMessageAlerts: @escaping (Bool) -> Void, updateMessagePreviews: @escaping (Bool) -> Void, updateMessageSound: @escaping (PeerMessageSound) -> Void, updateGroupAlerts: @escaping (Bool) -> Void, updateGroupPreviews: @escaping (Bool) -> Void, updateGroupSound: @escaping (PeerMessageSound) -> Void, updateChannelAlerts: @escaping (Bool) -> Void, updateChannelPreviews: @escaping (Bool) -> Void, updateChannelSound: @escaping (PeerMessageSound) -> Void, updateInAppSounds: @escaping (Bool) -> Void, updateInAppVibration: @escaping (Bool) -> Void, updateInAppPreviews: @escaping (Bool) -> Void, updateDisplayNameOnLockscreen: @escaping (Bool) -> Void, updateTotalUnreadCountStyle: @escaping (Bool) -> Void, updateIncludeTag: @escaping (PeerSummaryCounterTags, Bool) -> Void, updateTotalUnreadCountCategory: @escaping (Bool) -> Void, resetNotifications: @escaping () -> Void, updatedExceptionMode: @escaping(NotificationExceptionMode) -> Void, openAppSettings: @escaping () -> Void, updateJoinedNotifications: @escaping (Bool) -> Void, updateNotificationsFromAllAccounts: @escaping (Bool) -> Void) {
+    init(context: AccountContext, presentController: @escaping (ViewController, ViewControllerPresentationArguments?) -> Void, pushController: @escaping(ViewController)->Void, soundSelectionDisposable: MetaDisposable, authorizeNotifications: @escaping () -> Void, muteWarningInTabBar: @escaping (Bool) -> Void, suppressWarning: @escaping () -> Void, updateMessageAlerts: @escaping (Bool) -> Void, updateMessagePreviews: @escaping (Bool) -> Void, updateMessageSound: @escaping (PeerMessageSound) -> Void, updateGroupAlerts: @escaping (Bool) -> Void, updateGroupPreviews: @escaping (Bool) -> Void, updateGroupSound: @escaping (PeerMessageSound) -> Void, updateChannelAlerts: @escaping (Bool) -> Void, updateChannelPreviews: @escaping (Bool) -> Void, updateChannelSound: @escaping (PeerMessageSound) -> Void, updateInAppSounds: @escaping (Bool) -> Void, updateInAppVibration: @escaping (Bool) -> Void, updateInAppPreviews: @escaping (Bool) -> Void, updateDisplayNameOnLockscreen: @escaping (Bool) -> Void, updateTotalUnreadCountStyle: @escaping (Bool) -> Void, updateIncludeTag: @escaping (PeerSummaryCounterTags, Bool) -> Void, updateTotalUnreadCountCategory: @escaping (Bool) -> Void, resetNotifications: @escaping () -> Void, updatedExceptionMode: @escaping(NotificationExceptionMode) -> Void, openAppSettings: @escaping () -> Void, updateJoinedNotifications: @escaping (Bool) -> Void, updateNotificationsFromAllAccounts: @escaping (Bool) -> Void) {
         self.context = context
         self.presentController = presentController
         self.pushController = pushController
         self.soundSelectionDisposable = soundSelectionDisposable
         self.authorizeNotifications = authorizeNotifications
+        self.muteWarningInTabBar = muteWarningInTabBar
         self.suppressWarning = suppressWarning
         self.updateMessageAlerts = updateMessageAlerts
         self.updateMessagePreviews = updateMessagePreviews
@@ -123,6 +125,8 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
     
     case permissionInfo(PresentationTheme, String, String, Bool)
     case permissionEnable(PresentationTheme, String)
+    case permissionTabBarWarningMuteEnable(PresentationTheme, String, Bool)
+    case permissionTabBarWarningMuteNotice(PresentationTheme, String)
     
     case messageHeader(PresentationTheme, String)
     case messageAlerts(PresentationTheme, String, Bool)
@@ -171,7 +175,7 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
         switch self {
             case .accountsHeader, .allAccounts, .accountsInfo:
                 return NotificationsAndSoundsSection.accounts.rawValue
-            case .permissionInfo, .permissionEnable:
+            case .permissionInfo, .permissionEnable, .permissionTabBarWarningMuteEnable, .permissionTabBarWarningMuteNotice:
                 return NotificationsAndSoundsSection.permission.rawValue
             case .messageHeader, .messageAlerts, .messagePreviews, .messageSound, .messageNotice, .userExceptions:
                 return NotificationsAndSoundsSection.messages.rawValue
@@ -204,74 +208,78 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
                 return 3
             case .permissionEnable:
                 return 4
-            case .messageHeader:
+            case .permissionTabBarWarningMuteEnable:
                 return 5
-            case .messageAlerts:
+            case .permissionTabBarWarningMuteNotice:
                 return 6
-            case .messagePreviews:
+            case .messageHeader:
                 return 7
-            case .messageSound:
+            case .messageAlerts:
                 return 8
-            case .userExceptions:
+            case .messagePreviews:
                 return 9
-            case .messageNotice:
+            case .messageSound:
                 return 10
-            case .groupHeader:
+            case .userExceptions:
                 return 11
-            case .groupAlerts:
+            case .messageNotice:
                 return 12
-            case .groupPreviews:
+            case .groupHeader:
                 return 13
-            case .groupSound:
+            case .groupAlerts:
                 return 14
-            case .groupExceptions:
+            case .groupPreviews:
                 return 15
-            case .groupNotice:
+            case .groupSound:
                 return 16
-            case .channelHeader:
+            case .groupExceptions:
                 return 17
-            case .channelAlerts:
+            case .groupNotice:
                 return 18
-            case .channelPreviews:
+            case .channelHeader:
                 return 19
-            case .channelSound:
+            case .channelAlerts:
                 return 20
-            case .channelExceptions:
+            case .channelPreviews:
                 return 21
-            case .channelNotice:
+            case .channelSound:
                 return 22
-            case .inAppHeader:
+            case .channelExceptions:
                 return 23
-            case .inAppSounds:
+            case .channelNotice:
                 return 24
-            case .inAppVibrate:
+            case .inAppHeader:
                 return 25
-            case .inAppPreviews:
+            case .inAppSounds:
                 return 26
-            case .displayNamesOnLockscreen:
+            case .inAppVibrate:
                 return 27
-            case .displayNamesOnLockscreenInfo:
+            case .inAppPreviews:
                 return 28
-            case .badgeHeader:
+            case .displayNamesOnLockscreen:
                 return 29
-            case .unreadCountStyle:
+            case .displayNamesOnLockscreenInfo:
                 return 30
-            case .includePublicGroups:
+            case .badgeHeader:
                 return 31
-            case .includeChannels:
+            case .unreadCountStyle:
                 return 32
-            case .unreadCountCategory:
+            case .includePublicGroups:
                 return 33
-            case .unreadCountCategoryInfo:
+            case .includeChannels:
                 return 34
-            case .joinedNotifications:
+            case .unreadCountCategory:
                 return 35
-            case .joinedNotificationsInfo:
+            case .unreadCountCategoryInfo:
                 return 36
-            case .reset:
+            case .joinedNotifications:
                 return 37
-            case .resetNotice:
+            case .joinedNotificationsInfo:
                 return 38
+            case .reset:
+                return 39
+            case .resetNotice:
+                return 40
         }
     }
     
@@ -344,6 +352,18 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
             }
             case let .permissionEnable(lhsTheme, lhsText):
                 if case let .permissionEnable(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
+                    return true
+                } else {
+                    return false
+                }
+            case let .permissionTabBarWarningMuteEnable(lhsTheme, lhsText, lhsValue):
+                if case let .permissionTabBarWarningMuteEnable(rhsTheme, rhsText, rhsValue) = rhs, lhsTheme === rhsTheme, lhsText == rhsText, lhsValue == rhsValue {
+                    return true
+                } else {
+                    return false
+                }
+            case let .permissionTabBarWarningMuteNotice(lhsTheme, lhsText):
+                if case let .permissionTabBarWarningMuteNotice(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
                     return true
                 } else {
                     return false
@@ -577,6 +597,12 @@ private enum NotificationsAndSoundsEntry: ItemListNodeEntry {
                 return ItemListActionItem(theme: theme, title: text, kind: .generic, alignment: .natural, sectionId: self.section, style: .blocks, action: {
                     arguments.authorizeNotifications()
                 })
+            case let .permissionTabBarWarningMuteEnable(theme, text, value):
+                return ItemListSwitchItem(theme: theme, title: text, value: value, sectionId: self.section, style: .blocks, updated: { updatedValue in
+                    arguments.muteWarningInTabBar(!updatedValue)
+                }, tag: self.tag)
+            case let .permissionTabBarWarningMuteNotice(theme, text):
+                return ItemListTextItem(theme: theme, text: .plain(text), sectionId: self.section)
             case let .messageHeader(theme, text):
                 return ItemListSectionHeaderItem(theme: theme, text: text, sectionId: self.section)
             case let .messageAlerts(theme, text, value):
@@ -715,7 +741,7 @@ private func filteredGlobalSound(_ sound: PeerMessageSound) -> PeerMessageSound 
     }
 }
 
-private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warningSuppressed: Bool, globalSettings: GlobalNotificationSettingsSet, inAppSettings: InAppNotificationSettings, exceptions: (users: NotificationExceptionMode, groups: NotificationExceptionMode, channels: NotificationExceptionMode), presentationData: PresentationData, hasMoreThanOneAccount: Bool) -> [NotificationsAndSoundsEntry] {
+private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warningSuppressed: Bool, warningInTabBarMuted: Bool, globalSettings: GlobalNotificationSettingsSet, inAppSettings: InAppNotificationSettings, exceptions: (users: NotificationExceptionMode, groups: NotificationExceptionMode, channels: NotificationExceptionMode), presentationData: PresentationData, hasMoreThanOneAccount: Bool) -> [NotificationsAndSoundsEntry] {
     var entries: [NotificationsAndSoundsEntry] = []
     
     if hasMoreThanOneAccount {
@@ -739,6 +765,9 @@ private func notificationsAndSoundsEntries(authorizationStatus: AccessType, warn
             case (.denied, _):
                 entries.append(.permissionInfo(presentationData.theme, title, text, true))
                 entries.append(.permissionEnable(presentationData.theme, presentationData.strings.Notifications_PermissionsAllowInSettings))
+                // WARNING: - Requred localization
+                entries.append(.permissionTabBarWarningMuteEnable(presentationData.theme, "Show Warning in Tab", !warningInTabBarMuted))
+                entries.append(.permissionTabBarWarningMuteNotice(presentationData.theme, "A warning icon will appear in the tab bar."))
             case (.unreachable, false):
                 entries.append(.permissionInfo(presentationData.theme, title, text, false))
                 entries.append(.permissionEnable(presentationData.theme, presentationData.strings.Notifications_PermissionsOpenSettings))
@@ -836,6 +865,8 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
                     break
             }
         })
+    }, muteWarningInTabBar: { value in
+        ApplicationSpecificNotice.setNotificationsPermissionTabBarWarningMute(accountManager: context.sharedContext.accountManager, value: value)
     }, suppressWarning: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         presentControllerImpl?(textAlertController(context: context, title: presentationData.strings.Notifications_PermissionsSuppressWarningTitle, text: presentationData.strings.Notifications_PermissionsSuppressWarningText, actions: [TextAlertAction(type: .genericAction, title: presentationData.strings.Notifications_PermissionsKeepDisabled, action: {
@@ -1055,6 +1086,16 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
                 }
             }))
     }
+
+    let permissionWarningInTabBarMuted = Promise<Bool>(false)
+    if #available(iOSApplicationExtension 10.0, *) {
+        permissionWarningInTabBarMuted.set(.single(true)
+            |> then(
+                context.sharedContext.accountManager.noticeEntry(key: ApplicationSpecificNotice.notificationsPermissionTabBarWarningMuteKey())
+                    |> map { noticeView -> Bool in
+                        return (noticeView.value as? ApplicationSpecificVariantNotice)?.value ?? false
+                    }))
+    }
     
     let hasMoreThanOneAccount = context.sharedContext.activeAccounts
     |> map { _, accounts, _ -> Bool in
@@ -1062,8 +1103,8 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
     }
     |> distinctUntilChanged
     
-    let signal = combineLatest(context.sharedContext.presentationData, sharedData, preferences, notificationExceptions.get(), DeviceAccess.authorizationStatus(context: context, subject: .notifications), notificationsWarningSuppressed.get(), hasMoreThanOneAccount)
-        |> map { presentationData, sharedData, view, exceptions, authorizationStatus, warningSuppressed, hasMoreThanOneAccount -> (ItemListControllerState, (ItemListNodeState<NotificationsAndSoundsEntry>, NotificationsAndSoundsEntry.ItemGenerationArguments)) in
+    let signal = combineLatest(context.sharedContext.presentationData, sharedData, preferences, notificationExceptions.get(), DeviceAccess.authorizationStatus(context: context, subject: .notifications), notificationsWarningSuppressed.get(), permissionWarningInTabBarMuted.get(), hasMoreThanOneAccount)
+        |> map { presentationData, sharedData, view, exceptions, authorizationStatus, warningSuppressed, permissionWarningInTabBarMuted, hasMoreThanOneAccount -> (ItemListControllerState, (ItemListNodeState<NotificationsAndSoundsEntry>, NotificationsAndSoundsEntry.ItemGenerationArguments)) in
             
             let viewSettings: GlobalNotificationSettingsSet
             if let settings = view.values[PreferencesKeys.globalNotifications] as? GlobalNotificationSettings {
@@ -1079,7 +1120,7 @@ public func notificationsAndSoundsController(context: AccountContext, exceptions
                 inAppSettings = InAppNotificationSettings.defaultSettings
             }
             
-            let entries = notificationsAndSoundsEntries(authorizationStatus: authorizationStatus, warningSuppressed: warningSuppressed, globalSettings: viewSettings, inAppSettings: inAppSettings, exceptions: exceptions, presentationData: presentationData, hasMoreThanOneAccount: hasMoreThanOneAccount)
+            let entries = notificationsAndSoundsEntries(authorizationStatus: authorizationStatus, warningSuppressed: warningSuppressed, warningInTabBarMuted: permissionWarningInTabBarMuted, globalSettings: viewSettings, inAppSettings: inAppSettings, exceptions: exceptions, presentationData: presentationData, hasMoreThanOneAccount: hasMoreThanOneAccount)
             
             var index = 0
             var scrollToItem: ListViewScrollToItem?
