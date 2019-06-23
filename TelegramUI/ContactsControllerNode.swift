@@ -5,11 +5,25 @@ import Postbox
 import TelegramCore
 import SwiftSignalKit
 
+private final class ContactsControllerNodeView: UITracingLayerView, PreviewingHostView {
+    var previewingDelegate: PreviewingHostViewDelegate? {
+        return PreviewingHostViewDelegate(controllerForLocation: { [weak self] sourceView, point in
+            return self?.controller?.previewingController(from: sourceView, for: point)
+            }, commitController: { [weak self] controller in
+                self?.controller?.previewingCommit(controller)
+        })
+    }
+
+    weak var controller: ContactsController?
+}
+
 final class ContactsControllerNode: ASDisplayNode {
     let contactListNode: ContactListNode
     
     private let context: AccountContext
-    private var searchDisplayController: SearchDisplayController?
+    var searchDisplayController: SearchDisplayController?
+
+    weak var controller: ContactsController?
     
     private var containerLayout: (ContainerViewLayout, CGFloat)?
     
@@ -23,8 +37,9 @@ final class ContactsControllerNode: ASDisplayNode {
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
     
-    init(context: AccountContext, sortOrder: Signal<ContactsSortOrder, NoError>, present: @escaping (ViewController, Any?) -> Void) {
+    init(context: AccountContext, sortOrder: Signal<ContactsSortOrder, NoError>, controller: ContactsController, present: @escaping (ViewController, Any?) -> Void) {
         self.context = context
+        self.controller = controller
         
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         
@@ -50,9 +65,9 @@ final class ContactsControllerNode: ASDisplayNode {
         self.contactListNode = ContactListNode(context: context, presentation: presentation, displaySortOptions: true)
         
         super.init()
-        
+
         self.setViewBlock({
-            return UITracingLayerView()
+            return ContactsControllerNodeView()
         })
         
         self.backgroundColor = self.presentationData.theme.chatList.backgroundColor
@@ -100,6 +115,12 @@ final class ContactsControllerNode: ASDisplayNode {
                 }
             })
         }
+    }
+
+    override func didLoad() {
+        super.didLoad()
+
+        (self.view as? ContactsControllerNodeView)?.controller = self.controller
     }
     
     deinit {

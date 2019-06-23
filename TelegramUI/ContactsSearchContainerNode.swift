@@ -127,7 +127,7 @@ final class ContactsSearchContainerNode: SearchDisplayControllerContentNode {
     private let openPeer: (ContactListPeer) -> Void
     
     private let dimNode: ASDisplayNode
-    private let listNode: ListView
+    let listNode: ListView
     
     private let searchQuery = Promise<String?>()
     private let searchDisposable = MetaDisposable()

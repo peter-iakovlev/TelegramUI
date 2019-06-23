@@ -313,7 +313,8 @@ class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
             return nil
         }
     }
-    private var item: ContactsPeerItem? {
+
+    var item: ContactsPeerItem? {
         return self.layoutParams?.0
     }
     
