@@ -224,7 +224,7 @@ private func preparedInviteContactsTransition(account: Account, from fromEntries
     let insertions = indicesAndItems.map { ListViewInsertItem(index: $0.0, previousIndex: $0.2, item: $0.1.item(account: account, interaction: interaction), directionHint: nil) }
     let updates = updateIndices.map { ListViewUpdateItem(index: $0.0, previousIndex: $0.2, item: $0.1.item(account: account, interaction: interaction), directionHint: nil) }
     
-    return InviteContactsTransition(deletions: deletions, insertions: insertions, updates: updates, sortedContats: sortedContats, firstTime: firstTime, animated: animated)
+    return InviteContactsTransition(deletions: deletions, insertions: insertions, updates: updates, sortedContats: sortedContats, firstTime: firstTime, animated: animated, isLoading: false)
 }
 
 private struct InviteContactsTransition {
@@ -234,6 +234,7 @@ private struct InviteContactsTransition {
     let sortedContats: [(DeviceContactStableId, DeviceContactBasicData, Int32)]
     let firstTime: Bool
     let animated: Bool
+    let isLoading: Bool
 }
 
 final class InviteContactsControllerNode: ASDisplayNode {
@@ -276,6 +277,8 @@ final class InviteContactsControllerNode: ASDisplayNode {
     private var presentationDataDisposable: Disposable?
     
     private let themeAndStringsPromise: Promise<(PresentationTheme, PresentationStrings, PresentationPersonNameOrder, PresentationPersonNameOrder)>
+
+    private var chatListEmptyIndicator: ActivityIndicator?
     
     private let _ready = Promise<Bool>()
     private var readyValue = false {
@@ -431,7 +434,8 @@ final class InviteContactsControllerNode: ASDisplayNode {
             }
         })
         |> deliverOnMainQueue
-        
+
+        self.enqueueTransition(InviteContactsTransition(deletions: [], insertions: [], updates: [], sortedContats: [], firstTime: true, animated: false, isLoading: true))
         self.disposable = transition.start(next: { [weak self] transition in
             self?.enqueueTransition(transition)
         })
@@ -518,6 +522,11 @@ final class InviteContactsControllerNode: ASDisplayNode {
         let updateSizeAndInsets = ListViewUpdateSizeAndInsets(size: layout.size, insets: insets, headerInsets: headerInsets, duration: duration, curve: listViewCurve)
         
         self.listNode.transaction(deleteIndices: [], insertIndicesAndItems: [], updateIndicesAndItems: [], options: [.Synchronous, .LowLatency], scrollToItem: nil, updateSizeAndInsets: updateSizeAndInsets, stationaryItemRange: nil, updateOpaqueState: nil, completion: { _ in })
+
+        if let chatListEmptyIndicator = self.chatListEmptyIndicator {
+            let indicatorSize = chatListEmptyIndicator.measure(CGSize(width: 100.0, height: 100.0))
+            transition.updateFrame(node: chatListEmptyIndicator, frame: CGRect(origin: CGPoint(x: floor((layout.size.width - indicatorSize.width) / 2.0), y: updateSizeAndInsets.insets.top + floor((layout.size.height -  updateSizeAndInsets.insets.top - updateSizeAndInsets.insets.bottom - indicatorSize.height) / 2.0)), size: indicatorSize))
+        }
         
         if !hadValidLayout {
             self.dequeueTransitions()
@@ -579,6 +588,16 @@ final class InviteContactsControllerNode: ASDisplayNode {
                 } else if transition.animated {
                     options.insert(.AnimateInsertion)
                 }
+
+                if self.chatListEmptyIndicator == nil, transition.isLoading {
+                    let chatListEmptyIndicator = ActivityIndicator(type: .custom(self.presentationData.theme.list.itemAccentColor, 22.0, 1.0, false))
+                    self.chatListEmptyIndicator = chatListEmptyIndicator
+                    self.insertSubnode(chatListEmptyIndicator, aboveSubnode: self.listNode)
+                } else if !transition.isLoading, let chatListEmptyIndicator = self.chatListEmptyIndicator {
+                    self.chatListEmptyIndicator = nil
+                    chatListEmptyIndicator.removeFromSupernode()
+                }
+
                 self.listNode.transaction(deleteIndices: transition.deletions, insertIndicesAndItems: transition.insertions, updateIndicesAndItems: transition.updates, options: options, updateOpaqueState: nil, completion: { [weak self] _ in
                     if let strongSelf = self {
                         strongSelf.readyValue = true
