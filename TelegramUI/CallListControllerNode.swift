@@ -377,6 +377,10 @@ final class CallListControllerNode: ASDisplayNode {
         self.emptyStateDisposable.dispose()
     }
     
+    func dismissAllRevealOptions() {
+        listNode.dismissAllRevealOptions()
+    }
+    
     func updateThemeAndStrings(theme: PresentationTheme, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat, disableAnimations: Bool) {
         if theme !== self.currentState.theme || strings !== self.currentState.strings || disableAnimations != self.currentState.disableAnimations {
             switch self.mode {
