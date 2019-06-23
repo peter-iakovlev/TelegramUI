@@ -7,12 +7,12 @@ import TelegramCore
 private final class ChatRecentActionsFilterControllerArguments {
     let account: Account
     
-    let toggleAllActions: () -> Void
+    let toggleAllActions: (_ isOn: Bool) -> Void
     let toggleAction: ([AdminLogEventsFlags]) -> Void
-    let toggleAllAdmins: () -> Void
+    let toggleAllAdmins: (_ isOn: Bool) -> Void
     let toggleAdmin: (PeerId) -> Void
     
-    init(account: Account, toggleAllActions: @escaping () -> Void, toggleAction: @escaping ([AdminLogEventsFlags]) -> Void, toggleAllAdmins: @escaping () -> Void, toggleAdmin: @escaping (PeerId) -> Void) {
+    init(account: Account, toggleAllActions: @escaping (Bool) -> Void, toggleAction: @escaping ([AdminLogEventsFlags]) -> Void, toggleAllAdmins: @escaping (Bool) -> Void, toggleAdmin: @escaping (PeerId) -> Void) {
         self.account = account
         self.toggleAllActions = toggleAllActions
         self.toggleAction = toggleAction
@@ -203,8 +203,8 @@ private enum ChatRecentActionsFilterEntry: ItemListNodeEntry {
             case let .actionsTitle(theme, text):
                 return ItemListSectionHeaderItem(theme: theme, text: text, sectionId: self.section)
             case let .allActions(theme, text, value):
-                return ItemListSwitchItem(theme: theme, title: text, value: value, enabled: true, sectionId: self.section, style: .blocks, updated: { _ in
-                    arguments.toggleAllActions()
+                return ItemListSwitchItem(theme: theme, title: text, value: value, enabled: true, sectionId: self.section, style: .blocks, updated: { isOn in
+                    arguments.toggleAllActions(isOn)
                 })
             case let .actionItem(theme, _, events, text, value):
                 return ItemListCheckboxItem(theme: theme, title: text, style: .right, checked: value, zeroSeparatorInsets: false, sectionId: self.section, action: {
@@ -213,8 +213,8 @@ private enum ChatRecentActionsFilterEntry: ItemListNodeEntry {
             case let .adminsTitle(theme, text):
                 return ItemListSectionHeaderItem(theme: theme, text: text, sectionId: self.section)
             case let .allAdmins(theme, text, value):
-                return ItemListSwitchItem(theme: theme, title: text, value: value, enabled: true, sectionId: self.section, style: .blocks, updated: { _ in
-                    arguments.toggleAllAdmins()
+                return ItemListSwitchItem(theme: theme, title: text, value: value, enabled: true, sectionId: self.section, style: .blocks, updated: { isOn in
+                    arguments.toggleAllAdmins(isOn)
                 })
             case let .adminPeerItem(theme, strings, dateTimeFormat, nameDisplayOrder, _, participant, checked):
                 let peerText: String
@@ -371,9 +371,9 @@ public func channelRecentActionsFilterController(context: AccountContext, peer: 
     
     let actionsDisposable = DisposableSet()
     
-    let arguments = ChatRecentActionsFilterControllerArguments(account: context.account, toggleAllActions: {
+    let arguments = ChatRecentActionsFilterControllerArguments(account: context.account, toggleAllActions: { isOn in
         updateState { current in
-            if current.events.isEmpty {
+            if isOn {
                 return current.withUpdatedEvents(.all)
             } else {
                 return current.withUpdatedEvents([])
@@ -395,13 +395,13 @@ public func channelRecentActionsFilterController(context: AccountContext, peer: 
                 return current.withUpdatedEvents(updatedEvents)
             }
         }
-    }, toggleAllAdmins: {
+    }, toggleAllAdmins: { isOn in
         let _ = (adminsPromise.get()
         |> take(1)
         |> deliverOnMainQueue).start(next: { admins in
             if let _ = admins {
                 updateState { current in
-                    if let _ = current.adminPeerIds {
+                    if isOn {
                         return current.withUpdatedAdminPeerIds(nil)
                     } else {
                         return current.withUpdatedAdminPeerIds([])
@@ -421,7 +421,9 @@ public func channelRecentActionsFilterController(context: AccountContext, peer: 
                             return current.withUpdatedAdminPeerIds(updatedAdminPeerIds)
                         } else {
                             var updatedAdminPeerIds = current.adminPeerIds ?? admins.map { $0.peer.id }
-                            if !updatedAdminPeerIds.contains(adminId) {
+                            if updatedAdminPeerIds.contains(adminId), let index = updatedAdminPeerIds.index(of: adminId) {
+                                updatedAdminPeerIds.remove(at: index)
+                            } else {
                                 updatedAdminPeerIds.append(adminId)
                             }
                             return current.withUpdatedAdminPeerIds(updatedAdminPeerIds)
