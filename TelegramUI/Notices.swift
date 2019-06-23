@@ -129,6 +129,7 @@ private enum ApplicationSpecificGlobalNotice: Int32 {
     case archiveChatTips = 10
     case archiveIntroDismissed = 11
     case callsTabTip = 12
+    case notificationsPermissionTabBarWarningMute = 13
     
     var key: ValueBoxKey {
         let v = ValueBoxKey(length: 4)
@@ -188,6 +189,10 @@ private struct ApplicationSpecificNoticeKeys {
     
     static func notificationsPermissionWarning() -> NoticeEntryKey {
         return NoticeEntryKey(namespace: noticeNamespace(namespace: permissionsNamespace), key: ApplicationSpecificGlobalNotice.notificationsPermissionWarning.key)
+    }
+
+    static func notificationsPermissionTabBarWarningMute() -> NoticeEntryKey {
+        return NoticeEntryKey(namespace: noticeNamespace(namespace: permissionsNamespace), key: ApplicationSpecificGlobalNotice.notificationsPermissionTabBarWarningMute.key)
     }
     
     static func volumeButtonToUnmuteTip() -> NoticeEntryKey {
@@ -406,6 +411,10 @@ public struct ApplicationSpecificNotice {
     public static func notificationsPermissionWarningKey() -> NoticeEntryKey {
         return ApplicationSpecificNoticeKeys.notificationsPermissionWarning()
     }
+
+    public static func notificationsPermissionTabBarWarningMuteKey() -> NoticeEntryKey {
+        return ApplicationSpecificNoticeKeys.notificationsPermissionTabBarWarningMute()
+    }
     
     public static func getTimestampValue(_ entry: NoticeEntry) -> Int32? {
         if let value = entry as? ApplicationSpecificTimestampNotice {
@@ -419,6 +428,12 @@ public struct ApplicationSpecificNotice {
         let _ = accountManager.transaction { transaction -> Void in
             transaction.setNotice(ApplicationSpecificNoticeKeys.notificationsPermissionWarning(), ApplicationSpecificTimestampNotice(value: value))
         }.start()
+    }
+
+    public static func setNotificationsPermissionTabBarWarningMute(accountManager: AccountManager, value: Bool) {
+        let _ = accountManager.transaction { transaction -> Void in
+            transaction.setNotice(ApplicationSpecificNoticeKeys.notificationsPermissionTabBarWarningMute(), ApplicationSpecificVariantNotice(value: value))
+            }.start()
     }
     
     static func getVolumeButtonToUnmute(accountManager: AccountManager) -> Signal<Bool, NoError> {

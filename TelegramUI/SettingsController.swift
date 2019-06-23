@@ -1056,6 +1056,22 @@ public func settingsController(context: AccountContext, accountManager: AccountM
             )
         )
     }
+
+    let permissionWarningInTabBarMuted = Promise<Bool>(false)
+    if #available(iOSApplicationExtension 10.0, *) {
+        permissionWarningInTabBarMuted.set(
+            .single(true)
+                |> then(
+                    contextValue.get()
+                        |> mapToSignal { context -> Signal<Bool, NoError> in
+                            return context.sharedContext.accountManager.noticeEntry(key: ApplicationSpecificNotice.notificationsPermissionTabBarWarningMuteKey())
+                                |> map { noticeView -> Bool in
+                                    return (noticeView.value as? ApplicationSpecificVariantNotice)?.value ?? false
+                            }
+                    }
+            )
+        )
+    }
     
     let notifyExceptions = Promise<NotificationExceptionsList?>(NotificationExceptionsList(peers: [:], settings: [:]))
     let updateNotifyExceptions: () -> Void = {
@@ -1225,9 +1241,19 @@ public func settingsController(context: AccountContext, accountManager: AccountM
         return true
     })
     
-    let tabBarItem: Signal<ItemListControllerTabBarItem, NoError> = combineLatest(queue: .mainQueue(), updatedPresentationData, notificationsAuthorizationStatus.get(), notificationsWarningSuppressed.get(), accountTabBarAvatar, accountTabBarAvatarBadge)
-    |> map { presentationData, notificationsAuthorizationStatus, notificationsWarningSuppressed, accountTabBarAvatar, accountTabBarAvatarBadge -> ItemListControllerTabBarItem in
-        let notificationsWarning = shouldDisplayNotificationsPermissionWarning(status: notificationsAuthorizationStatus, suppressed:  notificationsWarningSuppressed)
+    let tabBarItem: Signal<ItemListControllerTabBarItem, NoError> = combineLatest(queue: .mainQueue(), updatedPresentationData, notificationsAuthorizationStatus.get(), notificationsWarningSuppressed.get(), accountTabBarAvatar, accountTabBarAvatarBadge, permissionWarningInTabBarMuted.get())
+    |> map { presentationData, notificationsAuthorizationStatus, notificationsWarningSuppressed, accountTabBarAvatar, accountTabBarAvatarBadge, permissionWarningInTabBarMuted -> ItemListControllerTabBarItem in
+
+        func shouldDisplayNotificationsPermissionWarningInTabBar(status: AccessType, suppressed: Bool, muted: Bool) -> Bool {
+            switch (status, suppressed, muted) {
+            case (.allowed, _, _), (.unreachable, true, _), (.notDetermined, true, _), (.denied, _, true):
+                return false
+            default:
+                return true
+            }
+        }
+
+        let notificationsWarning = shouldDisplayNotificationsPermissionWarningInTabBar(status: notificationsAuthorizationStatus, suppressed: notificationsWarningSuppressed, muted: permissionWarningInTabBarMuted)
         var otherAccountsBadge: String?
         if accountTabBarAvatarBadge > 0 {
             otherAccountsBadge = compactNumericCountString(Int(accountTabBarAvatarBadge), decimalSeparator: presentationData.dateTimeFormat.decimalSeparator)
