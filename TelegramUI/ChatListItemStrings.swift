@@ -2,7 +2,7 @@ import Foundation
 import Postbox
 import TelegramCore
 
-public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: PresentationPersonNameOrder, message: Message?, chatPeer: RenderedPeer, accountPeerId: PeerId, enableMediaEmoji: Bool = true) -> (peer: Peer?, hideAuthor: Bool, messageText: String) {
+public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: PresentationPersonNameOrder, message: Message?, chatPeer: RenderedPeer, accountPeerId: PeerId, isPeerGroup: Bool, enableMediaEmoji: Bool = true) -> (peer: Peer?, hideAuthor: Bool, messageText: String) {
     let peer: Peer?
     
     var hideAuthor = false
@@ -115,9 +115,9 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
                 case let invoice as TelegramMediaInvoice:
                     messageText = invoice.title
                 case let action as TelegramMediaAction:
-                    hideAuthor = true
                     switch action.action {
                         case let .phoneCall(_, discardReason, _):
+                            hideAuthor = !isPeerGroup
                             let incoming = message.flags.contains(.Incoming)
                             if let discardReason = discardReason {
                                 switch discardReason {
@@ -138,6 +138,7 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
                                 }
                             }
                         default:
+                            hideAuthor = true
                             if let text = plainServiceMessageString(strings: strings, nameDisplayOrder: nameDisplayOrder, message: message, accountPeerId: accountPeerId) {
                                 messageText = text
                             }
