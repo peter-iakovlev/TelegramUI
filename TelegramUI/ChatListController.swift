@@ -682,7 +682,7 @@ public class ChatListController: TelegramController, KeyShortcutResponder, UIVie
                     if let layout = strongSelf.validLayout, case .regular = layout.metrics.widthClass {
                         scrollToEndIfExists = true
                     }
-                    navigateToChatController(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peerId), scrollToEndIfExists: scrollToEndIfExists, animated: animated, completion: { [weak self] in
+                    navigateToChatController(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peerId), scrollToEndIfExists: scrollToEndIfExists, animated: UIDevice.current.userInterfaceIdiom == .pad ? false : animated, completion: { [weak self] in
                         self?.chatListDisplayNode.chatListNode.clearHighlightAnimated(true)
                     })
                 }
@@ -693,7 +693,7 @@ public class ChatListController: TelegramController, KeyShortcutResponder, UIVie
             if let strongSelf = self {
                 if let navigationController = strongSelf.navigationController as? NavigationController {
                     let chatListController = ChatListController(context: strongSelf.context, groupId: groupId, controlsHistoryPreload: false)
-                    navigationController.pushViewController(chatListController)
+                    navigationController.pushViewController(chatListController, animated: UIDevice.current.userInterfaceIdiom == .pad ? false : true)
                     strongSelf.chatListDisplayNode.chatListNode.clearHighlightAnimated(true)
                 }
             }
