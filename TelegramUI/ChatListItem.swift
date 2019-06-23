@@ -502,6 +502,17 @@ class ChatListItemNode: ItemListRevealOptionsItemNode {
         self.updateIsHighlighted(transition: (animated && !highlighted) ? .animated(duration: 0.3, curve: .easeInOut) : .immediate)
     }
     
+    override func setHighlightedPercent(_ percent: CGFloat) -> Bool {
+        guard isHighlighted else { return false }
+        
+        if percent == 0 {
+            setHighlighted(false, at: .zero, animated: true)
+        } else {
+            self.highlightedBackgroundNode.alpha = 2 * (1 - 1 / (1 + percent))
+        }
+        return isHighlighted
+    }
+    
     func updateIsHighlighted(transition: ContainedViewLayoutTransition) {
         var reallyHighlighted = self.isHighlighted
         if let item = self.item {
@@ -513,6 +524,7 @@ class ChatListItemNode: ItemListRevealOptionsItemNode {
         }
         
         if reallyHighlighted {
+            self.isHighlighted = true
             if self.highlightedBackgroundNode.supernode == nil {
                 self.insertSubnode(self.highlightedBackgroundNode, aboveSubnode: self.separatorNode)
                 self.highlightedBackgroundNode.alpha = 0.0
@@ -524,6 +536,7 @@ class ChatListItemNode: ItemListRevealOptionsItemNode {
                 self.onlineNode.setImage(PresentationResourcesChatList.recentStatusOnlineIcon(item.presentationData.theme, state: .highlighted))
             }
         } else {
+            self.isHighlighted = false
             if self.highlightedBackgroundNode.supernode != nil {
                 transition.updateAlpha(layer: self.highlightedBackgroundNode.layer, alpha: 0.0, completion: { [weak self] completed in
                     if let strongSelf = self {
