@@ -682,9 +682,7 @@ public class ChatListController: TelegramController, KeyShortcutResponder, UIVie
                     if let layout = strongSelf.validLayout, case .regular = layout.metrics.widthClass {
                         scrollToEndIfExists = true
                     }
-                    navigateToChatController(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peerId), scrollToEndIfExists: scrollToEndIfExists, animated: animated, completion: { [weak self] in
-                        self?.chatListDisplayNode.chatListNode.clearHighlightAnimated(true)
-                    })
+                    navigateToChatController(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peerId), scrollToEndIfExists: scrollToEndIfExists, animated: animated)
                 }
             }
         }
@@ -694,7 +692,6 @@ public class ChatListController: TelegramController, KeyShortcutResponder, UIVie
                 if let navigationController = strongSelf.navigationController as? NavigationController {
                     let chatListController = ChatListController(context: strongSelf.context, groupId: groupId, controlsHistoryPreload: false)
                     navigationController.pushViewController(chatListController)
-                    strongSelf.chatListDisplayNode.chatListNode.clearHighlightAnimated(true)
                 }
             }
         }
@@ -1070,8 +1067,17 @@ public class ChatListController: TelegramController, KeyShortcutResponder, UIVie
             self.dismissSearchOnDisappear = false
             self.deactivateSearch(animated: false)
         }
-        
-        self.chatListDisplayNode.chatListNode.clearHighlightAnimated(true)
+    }
+    
+    override public func navigationAlongsideTransition(type: NavigationTransition) -> ((CGFloat) -> ())? {
+        switch type {
+        case .Pop:
+            return { [weak self] progress in
+                self?.chatListDisplayNode.chatListNode.updateHiglightPercent(1 - progress)
+            }
+        case .Push:
+            return nil
+        }
     }
     
     override public func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -1091,10 +1097,17 @@ public class ChatListController: TelegramController, KeyShortcutResponder, UIVie
     
     override public func navigationStackConfigurationUpdated(next: [ViewController]) {
         super.navigationStackConfigurationUpdated(next: next)
-        
-        let chatLocation = (next.first as? ChatController)?.chatLocation
-        
-        self.chatListDisplayNode.chatListNode.updateSelectedChatLocation(chatLocation, progress: 1.0, transition: .immediate)
+
+        if UIDevice.current.userInterfaceIdiom != .phone {
+            let chatLocation = (navigationController?.viewControllers.last as? ChatController)?.chatLocation
+            chatListDisplayNode.chatListNode.clearHighlightAnimated(false)
+            chatListDisplayNode.chatListNode.updateSelectedChatLocation(chatLocation, progress: 1.0, transition: .immediate)
+        } else {
+            if let chatLocation = (navigationController?.viewControllers.last as? ChatController)?.chatLocation {
+                chatListDisplayNode.chatListNode.clearHighlightAnimated(false)
+                chatListDisplayNode.chatListNode.updateSelectedChatLocation(chatLocation, progress: 1.0, transition: .immediate)
+            }
+        }
     }
     
     @objc func editPressed() {

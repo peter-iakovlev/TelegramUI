@@ -1419,7 +1419,28 @@ final class ChatListNode: ListView {
         
         self.forEachItemNode { itemNode in
             if let itemNode = itemNode as? ChatListItemNode {
+                _ = itemNode.setHighlightedPercent(0)
                 itemNode.updateIsHighlighted(transition: transition)
+            }
+        }
+    }
+    
+    private var nodeCurrentlyBeingAnimated: ChatListItemNode?
+    override public func updateHiglightPercent(_ percent: CGFloat) {
+        if percent == 0, let interaction = self.interaction {
+            interaction.highlightedChatLocation = nil
+        }
+        if percent == 0 || percent == 1 {
+            nodeCurrentlyBeingAnimated = nil
+        }
+        
+        if let currentlyAnimatedNode = nodeCurrentlyBeingAnimated {
+            _ = currentlyAnimatedNode.setHighlightedPercent(percent)
+        } else {
+            self.forEachItemNode { itemNode in
+                if let itemNode = itemNode as? ChatListItemNode, itemNode.setHighlightedPercent(percent) {
+                    nodeCurrentlyBeingAnimated = itemNode
+                }
             }
         }
     }
