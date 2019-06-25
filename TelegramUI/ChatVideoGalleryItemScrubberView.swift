@@ -40,7 +40,7 @@ final class ChatVideoGalleryItemScrubberView: UIView {
         }
     }
     
-    var seek: (Double) -> Void = { _ in }
+    var seek: (_ timestamp: Double, _ isContinuous: Bool) -> Void = { _, _ in }
     
     override init(frame: CGRect) {
         self.scrubberNode = MediaPlayerScrubbingNode(content: .standard(lineHeight: 5.0, lineCap: .round, scrubberHandle: .circle, backgroundColor: UIColor(white: 1.0, alpha: 0.42), foregroundColor: .white))
@@ -57,8 +57,8 @@ final class ChatVideoGalleryItemScrubberView: UIView {
         
         super.init(frame: frame)
         
-        self.scrubberNode.seek = { [weak self] timestamp in
-            self?.seek(timestamp)
+        self.scrubberNode.seek = { [weak self] timestamp, isContinuous in
+            self?.seek(timestamp, isContinuous)
         }
         
         self.scrubberNode.playerStatusUpdated = { [weak self] status in
@@ -162,5 +162,14 @@ final class ChatVideoGalleryItemScrubberView: UIView {
         self.fileSizeNode.alpha = size.width < size.height ? 1.0 : 0.0
         
         self.scrubberNode.frame = CGRect(origin: CGPoint(x: scrubberInset, y: 6.0), size: CGSize(width: size.width - leftInset - rightInset - scrubberInset * 2.0, height: scrubberHeight))
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        var hitTestRect = self.bounds
+        let minHeightDiff = 44.0 - hitTestRect.height
+        if (minHeightDiff > 0) {
+            hitTestRect = bounds.insetBy(dx: 0, dy: -minHeightDiff / 2.0)
+        }
+        return hitTestRect.contains(point)
     }
 }

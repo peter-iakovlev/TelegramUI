@@ -82,7 +82,7 @@ private final class ChatDocumentURLProtocol: URLProtocol {
     }
 }
 
-class ChatDocumentGalleryItemNode: GalleryItemNode, WKNavigationDelegate {
+class ChatDocumentGalleryItemNode: ZoomableContentGalleryItemNode, WKNavigationDelegate {
     fileprivate let _title = Promise<String>()
     
     private let statusNodeContainer: HighlightableButtonNode
@@ -127,9 +127,9 @@ class ChatDocumentGalleryItemNode: GalleryItemNode, WKNavigationDelegate {
         self.statusNode.isHidden = true
         
         super.init()
-        
-        self.view.addSubview(self.webView)
-        
+
+        self.view.insertSubview(self.webView, belowSubview: self.scrollNode.view)
+
         self.statusNodeContainer.addSubnode(self.statusNode)
         self.addSubnode(self.statusNodeContainer)
         

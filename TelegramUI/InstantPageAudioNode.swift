@@ -127,12 +127,13 @@ final class InstantPageAudioNode: ASDisplayNode, InstantPageNode {
             }
         }
         
-        self.scrubbingNode.seek = { [weak self] timestamp in
-            if let strongSelf = self {
-                if let _ = strongSelf.playbackState {
-                    strongSelf.context.sharedContext.mediaManager.playlistControl(.seek(timestamp), type: strongSelf.playlistType)
-                }
-            }
+        self.scrubbingNode.seek = { [weak self] timestamp, isContinuous in
+            guard !isContinuous,
+                let strongSelf = self,
+                let _ = strongSelf.playbackState
+            else { return }
+
+            strongSelf.context.sharedContext.mediaManager.playlistControl(.seek(timestamp), type: strongSelf.playlistType)
         }
         
         /*if let applicationContext = account.applicationContext as? TelegramApplicationContext, let (playlistId, itemId) = instantPageAudioPlaylistAndItemIds(webpage: webpage, media: self.media) {

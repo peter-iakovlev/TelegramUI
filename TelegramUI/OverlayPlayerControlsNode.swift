@@ -284,8 +284,8 @@ final class OverlayPlayerControlsNode: ASDisplayNode {
             }
         })
         
-        self.scrubberNode.seek = { [weak self] value in
-            self?.control?(.seek(value))
+        self.scrubberNode.seek = { [weak self] timestamp, isContinuous in
+            self?.control?(.seek(timestamp))
         }
         
         self.collapseNode.addTarget(self, action: #selector(self.collapsePressed), forControlEvents: .touchUpInside)
