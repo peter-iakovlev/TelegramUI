@@ -62,10 +62,12 @@ enum MediaPlayerSeek {
     case timecode(Double)
 }
 
+typealias StreamingDurationParameters = (stall: Double, lowWater: Double, highWater: Double)
 enum MediaPlayerStreaming {
     case none
     case conservative
     case earlierStart
+    case seekInProgress
     
     var enabled: Bool {
         if case .none = self {
@@ -75,12 +77,15 @@ enum MediaPlayerStreaming {
         }
     }
     
-    var parameters: (Double, Double, Double) {
+    var parameters: StreamingDurationParameters {
         switch self {
             case .none, .conservative:
                 return (1.0, 2.0, 3.0)
             case .earlierStart:
                 return (1.0, 1.0, 2.0)
+            case .seekInProgress:
+                // Avoid buffering while seek is in progress (timestamp changes frequently)
+                return (0.001, 0.001, 0.001)
         }
     }
 }
@@ -223,7 +228,7 @@ private final class MediaPlayerContext {
         }
     }
     
-    fileprivate func seek(timestamp: Double) {
+    fileprivate func seek(timestamp: Double, mediaSeekState: MediaSeekState = .unknown) {
         assert(self.queue.isCurrent())
         
         let action: MediaPlayerPlaybackAction
@@ -238,7 +243,7 @@ private final class MediaPlayerContext {
         self.seek(timestamp: timestamp, action: action)
     }
     
-    fileprivate func seek(timestamp: Double, action: MediaPlayerPlaybackAction) {
+    fileprivate func seek(timestamp: Double, action: MediaPlayerPlaybackAction, mediaSeekState: MediaSeekState = .unknown) {
         assert(self.queue.isCurrent())
         
         var loadedState: MediaPlayerLoadedState?
@@ -251,7 +256,7 @@ private final class MediaPlayerContext {
             case let .paused(currentLoadedState):
                 loadedState = currentLoadedState
             case let .seeking(previousFrameSource, previousTimestamp, seekStateValue, previousDisposable, _, previousEnableSound):
-                if previousTimestamp.isEqual(to: timestamp) && self.enableSound == previousEnableSound {
+                if previousTimestamp.isEqual(to: timestamp) && self.enableSound == previousEnableSound && mediaSeekState != .ended {
                     self.state = .seeking(frameSource: previousFrameSource, timestamp: previousTimestamp, seekState: seekStateValue, disposable: previousDisposable, action: action, enableSound: self.enableSound)
                     return
                 } else {
@@ -294,7 +299,14 @@ private final class MediaPlayerContext {
             self.playerStatus.set(.single(status))
         }
         
-        let frameSource = FFMpegMediaFrameSource(queue: self.queue, postbox: self.postbox, resourceReference: self.resourceReference, tempFilePath: self.tempFilePath, streamable: self.streamable.enabled, video: self.video, preferSoftwareDecoding: self.preferSoftwareDecoding, fetchAutomatically: self.fetchAutomatically, stallDuration: self.streamable.parameters.0, lowWaterDuration: self.streamable.parameters.1, highWaterDuration: self.streamable.parameters.2)
+        let streamableParameters: StreamingDurationParameters
+        if (mediaSeekState == .inProgress) {
+            streamableParameters = MediaPlayerStreaming.seekInProgress.parameters
+        } else {
+            streamableParameters = streamable.parameters
+        }
+        
+        let frameSource = FFMpegMediaFrameSource(queue: self.queue, postbox: self.postbox, resourceReference: self.resourceReference, tempFilePath: self.tempFilePath, streamable: self.streamable.enabled, video: self.video, preferSoftwareDecoding: self.preferSoftwareDecoding, fetchAutomatically: self.fetchAutomatically, stallDuration: streamableParameters.stall, lowWaterDuration: streamableParameters.lowWater, highWaterDuration: streamableParameters.highWater, mediaSeekState: mediaSeekState)
         let disposable = MetaDisposable()
         let updatedSeekState: MediaPlayerSeekState?
         if let loadedDuration = loadedDuration {
@@ -1031,64 +1043,14 @@ final class MediaPlayer {
             }
         }
     }
-    
-    fileprivate var lastSeekCallTime: DispatchTime = .now()
-    
-    // Calls only one action within specified time interval.
-    // Other actions are ignored.
-    private func debounceSeek(withTimeInterval timeInterval: TimeInterval,
-                              forceInstantUpdate: Bool = false,
-                              action: @escaping ()->Void) {
-        
-        func dispatchTimeInterval(_ withTimeInterval: TimeInterval) -> DispatchTimeInterval {
-            return DispatchTimeInterval.nanoseconds(Int(withTimeInterval * Double(NSEC_PER_SEC)))
-        }
-        
-        let nextCallTime = lastSeekCallTime + dispatchTimeInterval(timeInterval)
-        if DispatchTime.now() >= nextCallTime || forceInstantUpdate {
-            lastSeekCallTime = .now()
-            self.queue.async {
-                // instant seek
-                action()
-            }
-        } else {
-            self.queue.after(timeInterval) { [weak self] in
-                guard let self = self else { return }
-                let nextCallTime = self.lastSeekCallTime + dispatchTimeInterval(timeInterval)
-                if !self.ignoreFurtherDebouncedUpdates && (DispatchTime.now() >= nextCallTime) {
-                    // debounced seek
-                    action()
-                    self.lastSeekCallTime = .now()
-                }
-            }
-        }
-    }
-    
-    // Continuous seek performance overview
-    //
-    // iPhone 7
-    //   480p video
-    //     playback - 18% CPU
-    //     8 FPS continuous seek - 40% CPU
-    //     15 FPS continuous seek - 60% CPU
-    //   1080p video
-    //     playback - 18% CPU
-    //     8 FPS continuous seek - 85% CPU
-    //     15 FPS continuous seek - 120% CPU
-    fileprivate let debouncedSeekTargetFPS: Double = 8.0
-    
-    // used to ignore all the delayed seeks after an immediate one
-    fileprivate var ignoreFurtherDebouncedUpdates: Bool = false
-    
-    func seek(timestamp: Double, play: Bool? = nil, debounce: Bool = false) {
-
-        ignoreFurtherDebouncedUpdates = !debounce
-        debounceSeek(withTimeInterval: 1.0 / debouncedSeekTargetFPS, forceInstantUpdate: !debounce) {
+   
+    func seek(timestamp: Double, play: Bool? = nil, mediaSeekState: MediaSeekState = .unknown) {
+        self.queue.async {
             if let context = self.contextRef?.takeUnretainedValue() {
                 if let play = play {
-                    context.seek(timestamp: timestamp, action: play ? .play : .pause)
+                    context.seek(timestamp: timestamp, action: play ? .play : .pause, mediaSeekState: mediaSeekState)
                 } else {
-                    context.seek(timestamp: timestamp)
+                    context.seek(timestamp: timestamp, mediaSeekState: mediaSeekState)
                 }
             }
         }

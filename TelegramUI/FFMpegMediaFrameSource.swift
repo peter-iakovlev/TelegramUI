@@ -78,6 +78,7 @@ final class FFMpegMediaFrameSource: NSObject, MediaFrameSource {
     private let preferSoftwareDecoding: Bool
     private let fetchAutomatically: Bool
     private let maximumFetchSize: Int?
+    private var mediaSeekState: MediaSeekState
     
     private let taskQueue: ThreadTaskQueue
     private let thread: Thread
@@ -98,7 +99,7 @@ final class FFMpegMediaFrameSource: NSObject, MediaFrameSource {
         }
     }
    
-    init(queue: Queue, postbox: Postbox, resourceReference: MediaResourceReference, tempFilePath: String?, streamable: Bool, video: Bool, preferSoftwareDecoding: Bool, fetchAutomatically: Bool, maximumFetchSize: Int? = nil, stallDuration: Double = 1.0, lowWaterDuration: Double = 2.0, highWaterDuration: Double = 3.0) {
+    init(queue: Queue, postbox: Postbox, resourceReference: MediaResourceReference, tempFilePath: String?, streamable: Bool, video: Bool, preferSoftwareDecoding: Bool, fetchAutomatically: Bool, maximumFetchSize: Int? = nil, stallDuration: Double = 1.0, lowWaterDuration: Double = 2.0, highWaterDuration: Double = 3.0, mediaSeekState: MediaSeekState) {
         self.queue = queue
         self.postbox = postbox
         self.resourceReference = resourceReference
@@ -111,6 +112,7 @@ final class FFMpegMediaFrameSource: NSObject, MediaFrameSource {
         self.stallDuration = stallDuration
         self.lowWaterDuration = lowWaterDuration
         self.highWaterDuration = highWaterDuration
+        self.mediaSeekState = mediaSeekState
         
         self.taskQueue = ThreadTaskQueue()
         
@@ -185,9 +187,10 @@ final class FFMpegMediaFrameSource: NSObject, MediaFrameSource {
         let preferSoftwareDecoding = self.preferSoftwareDecoding
         let fetchAutomatically = self.fetchAutomatically
         let maximumFetchSize = self.maximumFetchSize
+        let mediaSeekState = self.mediaSeekState
         
         self.performWithContext { [weak self] context in
-            context.initializeState(postbox: postbox, resourceReference: resourceReference, tempFilePath: tempFilePath, streamable: streamable, video: video, preferSoftwareDecoding: preferSoftwareDecoding, fetchAutomatically: fetchAutomatically, maximumFetchSize: maximumFetchSize)
+            context.initializeState(postbox: postbox, resourceReference: resourceReference, tempFilePath: tempFilePath, streamable: streamable, video: video, preferSoftwareDecoding: preferSoftwareDecoding, fetchAutomatically: fetchAutomatically, maximumFetchSize: maximumFetchSize, mediaSeekState: mediaSeekState)
             
             let (frames, endOfStream) = context.takeFrames(until: timestamp)
             
@@ -235,6 +238,7 @@ final class FFMpegMediaFrameSource: NSObject, MediaFrameSource {
             let preferSoftwareDecoding = self.preferSoftwareDecoding
             let fetchAutomatically = self.fetchAutomatically
             let maximumFetchSize = self.maximumFetchSize
+            let mediaSeekState = self.mediaSeekState
             
             let currentSemaphore = Atomic<Atomic<DispatchSemaphore?>?>(value: nil)
             
@@ -245,7 +249,7 @@ final class FFMpegMediaFrameSource: NSObject, MediaFrameSource {
             self.performWithContext { [weak self] context in
                 let _ = currentSemaphore.swap(context.currentSemaphore)
                 
-                context.initializeState(postbox: postbox, resourceReference: resourceReference, tempFilePath: tempFilePath, streamable: streamable, video: video, preferSoftwareDecoding: preferSoftwareDecoding, fetchAutomatically: fetchAutomatically, maximumFetchSize: maximumFetchSize)
+                context.initializeState(postbox: postbox, resourceReference: resourceReference, tempFilePath: tempFilePath, streamable: streamable, video: video, preferSoftwareDecoding: preferSoftwareDecoding, fetchAutomatically: fetchAutomatically, maximumFetchSize: maximumFetchSize, mediaSeekState: mediaSeekState)
                 
                 context.seek(timestamp: timestamp, completed: { streamDescriptionsAndTimestamp in
                     queue.async {

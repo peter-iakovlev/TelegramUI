@@ -312,18 +312,7 @@ private final class NativeVideoContentNode: ASDisplayNode, UniversalVideoContent
             }
         }()
         
-        let shouldDebounce: Bool = {
-            switch seekState {
-            case .inProgress:
-                // allow delayed seeks
-                return true
-            case .unknown, .ended:
-                // seek immediately
-                return false
-            }
-        }()
-        
-        self.player.seek(timestamp: timestamp, play: shouldPlay, debounce: shouldDebounce)
+        self.player.seek(timestamp: timestamp, play: shouldPlay, mediaSeekState: seekState)
     }
     
     func playOnceWithSound(playAndRecord: Bool, seek: MediaPlayerSeek, actionAtEnd: MediaPlayerPlayOnceWithSoundActionAtEnd) {

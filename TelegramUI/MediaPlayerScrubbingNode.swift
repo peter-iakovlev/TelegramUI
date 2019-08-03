@@ -399,11 +399,20 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                     handleNodeContainer.updateScrubbing = { [weak self] addedFraction in
                         if let strongSelf = self {
                             if let statusValue = strongSelf.statusValue, let scrubbingBeginTimestamp = strongSelf.scrubbingBeginTimestamp, Double(0.0).isLess(than: statusValue.duration) {
-                                strongSelf.scrubbingTimestampValue = max(0.0, min(statusValue.duration, scrubbingBeginTimestamp + statusValue.duration * Double(addedFraction)))
+                                let timestampValue = max(0.0, min(statusValue.duration, scrubbingBeginTimestamp + statusValue.duration * Double(addedFraction)))
+                                let equalsToPreviousTimestampValue: Bool = {
+                                    if let value = strongSelf.scrubbingTimestampValue {
+                                        return timestampValue.isEqual(to: value)
+                                    } else {
+                                        return false
+                                    }
+                                }()
+                                strongSelf.scrubbingTimestampValue = timestampValue
                                 strongSelf._scrubbingTimestamp.set(.single(strongSelf.scrubbingTimestampValue))
                                 if strongSelf.allowsContinuousSeekUpdates,
-                                    let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue {
-                                    strongSelf.seek?(scrubbingTimestampValue, .inProgress)
+                                    let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue,
+                                    !equalsToPreviousTimestampValue {
+                                    strongSelf.debounceSeek(timestamp: scrubbingTimestampValue, mediaSeekState: .inProgress)
                                 }
                                 strongSelf.updateProgressAnimations()
                             }
@@ -424,7 +433,7 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                                             strongSelf.ignoreSeekId = statusValue.seekId
                                     }
                                 }
-                                strongSelf.seek?(scrubbingTimestampValue, .ended)
+                                strongSelf.debounceSeek(timestamp: scrubbingTimestampValue, mediaSeekState: .ended)
                             }
                             strongSelf.updateProgressAnimations()
                         }
@@ -469,7 +478,7 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                             let scrubbingTimestampValue = strongSelf.scrubbingTimestampValue
                             strongSelf.scrubbingTimestampValue = nil
                             if let scrubbingTimestampValue = scrubbingTimestampValue, apply {
-                                strongSelf.seek?(scrubbingTimestampValue, .ended)
+                                strongSelf.debounceSeek(timestamp: scrubbingTimestampValue, mediaSeekState: .ended)
                             }
                             strongSelf.updateProgressAnimations()
                         }
@@ -484,6 +493,50 @@ final class MediaPlayerScrubbingNode: ASDisplayNode {
                     self?.isInHierarchyValue = false
                     self?.updateProgressAnimations()
                 }
+        }
+    }
+    
+    private var lastActionCallTime: DispatchTime = .now()
+    
+    // used to ignore all the delayed seeks after an immediate one
+    private var ignoreFurtherDebouncedUpdates: Bool = false
+    
+    // max number of seek calls per second
+    fileprivate let debouncedSeekTargetFPS: Double = 6.0
+    
+    private func debounceSeek(timestamp: Double, mediaSeekState: MediaSeekState = .unknown) {
+        ignoreFurtherDebouncedUpdates = (mediaSeekState != .inProgress)
+        
+        debounceAction(withTimeInterval: 1.0 / debouncedSeekTargetFPS, forceInstantUpdate: ignoreFurtherDebouncedUpdates) { [weak self] in
+            self?.seek?(timestamp, mediaSeekState)
+        }
+    }
+    
+    // Calls only one action within specified time interval.
+    // Other actions are ignored.
+    private func debounceAction(withTimeInterval timeInterval: TimeInterval,
+                              forceInstantUpdate: Bool = false,
+                              action: @escaping ()->Void) {
+        
+        func dispatchTimeInterval(_ withTimeInterval: TimeInterval) -> DispatchTimeInterval {
+            return DispatchTimeInterval.nanoseconds(Int(withTimeInterval * Double(NSEC_PER_SEC)))
+        }
+        
+        let nextCallTime = lastActionCallTime + dispatchTimeInterval(timeInterval)
+        if DispatchTime.now() > nextCallTime || forceInstantUpdate {
+            lastActionCallTime = .now()
+            // instant action
+            action()
+        } else {
+            Queue.mainQueue().after(timeInterval) { [weak self] in
+                guard let self = self else { return }
+                let nextCallTime = self.lastActionCallTime + dispatchTimeInterval(timeInterval)
+                if !self.ignoreFurtherDebouncedUpdates && (DispatchTime.now() >= nextCallTime) {
+                    // debounced action
+                    action()
+                    self.lastActionCallTime = .now()
+                }
+            }
         }
     }
     
