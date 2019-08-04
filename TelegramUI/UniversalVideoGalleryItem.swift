@@ -171,6 +171,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     private var item: UniversalVideoGalleryItem?
     
     private let statusDisposable = MetaDisposable()
+    private let mediaSeekStateDisposable = MetaDisposable()
     
     private let fetchDisposable = MetaDisposable()
     private var fetchStatus: MediaResourceStatus?
@@ -257,6 +258,8 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     
     deinit {
         self.statusDisposable.dispose()
+        self.fetchDisposable.dispose()
+        self.mediaSeekStateDisposable.dispose()
     }
     
     override func ready() -> Signal<Void, NoError> {
@@ -378,6 +381,19 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                     })
                 }
             }
+            
+            self.mediaSeekStateDisposable.set((videoNode.lastMediaSeekState
+            |> deliverOnMainQueue).start(next: { [weak self] mediaSeekState in
+                if let strongSelf = self,
+                    let mediaSeekState = mediaSeekState {
+                    // hide fetching/buffering status UI updates while seek is in progress (and updates frequently)
+                    if  mediaSeekState == .inProgress {
+                        strongSelf.statusNode.isHidden = true
+                    } else {
+                        strongSelf.statusNode.isHidden = false
+                    }
+                }
+            }))
 
             self.statusDisposable.set((combineLatest(videoNode.status, mediaFileStatus)
             |> deliverOnMainQueue).start(next: { [weak self] value, fetchStatus in

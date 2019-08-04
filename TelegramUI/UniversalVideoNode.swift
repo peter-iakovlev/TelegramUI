@@ -112,6 +112,11 @@ final class UniversalVideoNode: ASDisplayNode {
         return self._ready.get()
     }
     
+    private let _lastMediaSeekState = Promise<MediaSeekState?>()
+    var lastMediaSeekState: Signal<MediaSeekState?, NoError> {
+        return self._lastMediaSeekState.get()
+    }
+    
     var canAttachContent: Bool = false {
         didSet {
             if self.canAttachContent != oldValue {
@@ -264,6 +269,7 @@ final class UniversalVideoNode: ASDisplayNode {
     }
     
     func seek(_ timestamp: Double, seekState: MediaSeekState = .unknown) {
+        self._lastMediaSeekState.set(.single(seekState))
         self.manager.withUniversalVideoContent(id: self.content.id, { contentNode in
             if let contentNode = contentNode {
                 contentNode.seek(timestamp, seekState: seekState)
